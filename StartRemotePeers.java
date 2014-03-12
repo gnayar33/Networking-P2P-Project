@@ -43,7 +43,7 @@ public class StartRemotePeers {
 			in.close();
 		}
 		catch (Exception ex) {
-			System.out.println(ex.toString());
+			System.out.println("ERROR: "+ex.toString());
 		}
 	}
 	
@@ -67,7 +67,7 @@ public class StartRemotePeers {
 				
 				// *********************** IMPORTANT *************************** //
 				// If your program is JAVA, use this line.
-				Runtime.getRuntime().exec("ssh " + pInfo.peerAddress + " cd " + path + "; java peerProcess " + pInfo.peerId);
+				Runtime.getRuntime().exec("ssh -o \"StrictHostKeyChecking no\"" + pInfo.peerAddress + " cd " + path + "; java peerProcess " + pInfo.peerId);
 				
 				// If your program is C/C++, use this line instead of the above line. 
 				//Runtime.getRuntime().exec("ssh " + pInfo.peerAddress + " cd " + path + "; ./peerProcess " + pInfo.peerId);
@@ -76,7 +76,7 @@ public class StartRemotePeers {
 
 		}
 		catch (Exception ex) {
-			System.out.println(ex);
+			System.out.println("ERROR IS: " + ex);
 		}
 	}
 
