@@ -1,2 +1,4 @@
 *.class
 PeerInfo.cfg
+compileJava.bat
+WINDOWSRUNCOMPILE.txt
