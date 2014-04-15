@@ -4,7 +4,8 @@ import java.net.*;
 
 public class peerProcess {
 
-	private int peerId;
+	private int peerId, pos;
+	private int numPeers = 0;
 	private String hostName;
 	private int port;
 	private int numPrefNeighbors;
@@ -16,6 +17,7 @@ public class peerProcess {
 	private boolean hasFile;
 	private byte[] bitfield;
 	
+	ArrayList<Socket> socketList = new ArrayList<Socket>();
 	private HashSet<Integer> interestedList = new HashSet<Integer>();		//maybe hashmap with downloading rate
 	private HashSet<Integer> preferredNeighbors = new HashSet<Integer>(numPrefNeighbors);
 	private HashSet<Integer> connections = new HashSet<Integer>();
@@ -30,22 +32,27 @@ public class peerProcess {
 		pp.peerId = Integer.parseInt(args[0]);
 		pp.getCommonConfiguration();
 		pp.getPeerInfoConfiguration();
+		System.out.println("hi from " + pp.peerId + " pos " + pp.pos + " peerInfo Size " + pp.peerInfoVector.size() + " numPeers " + pp.numPeers);
 		
+		pp.setUpClient();
 		pp.setUpServer();
-		System.out.println("hi from " + pp.peerId);
-
-		for(int i = 0; i < pp.peerInfoVector.size(); i++) {
-			if(Integer.parseInt(pp.peerInfoVector.get(i).peerId) == pp.peerId) {
-				break;
-			}
-		}
 
 		//pp.receiveMessage();
 	}
 
 	public void setUpServer() {
-		ServerSocket welcomeSocket;
-		Socket connectionSocket;
+		(new WelcomeThread(port, pos, numPeers, peerId, this)).start();
+	}
+	
+	public void setUpClient() {
+		for(int i = 1; i < pos; i++) {
+			RemotePeerInfo peerInfo = peerInfoVector.get(i - 1);
+			try {
+				Socket clientSocket = new Socket(peerInfo.peerAddress, Integer.parseInt(peerInfo.peerPort));
+				socketList.add(clientSocket);
+			}
+			catch(Exception e) {}
+		}
 	}
 
 	public void receiveMessage() {
@@ -182,7 +189,7 @@ public class peerProcess {
 		try {
 			BufferedReader in = new BufferedReader(new FileReader("PeerInfo.cfg"));
 			while((st = in.readLine()) != null) {
-				
+				numPeers++;
 				String[] tokens = st.split("\\s+");
 		    		/*System.out.println("tokens begin ----");
 				for (int x=0; x<tokens.length; x++) {
@@ -191,6 +198,7 @@ public class peerProcess {
 				System.out.println("tokens end ----");*/
 			
 				if(Integer.parseInt(tokens[0]) == peerId) {
+					pos = numPeers;
 					hostName = tokens[1];
 					port = Integer.parseInt(tokens[2]);
 					int numPieces = fileSize / pieceSize;
@@ -218,7 +226,6 @@ public class peerProcess {
 		        			hasFile = false;
 		        			Arrays.fill(bitfield, (byte) 0x00);
 		        		}
-		        		break;
 				}
 				else {
 					peerInfoVector.addElement(new RemotePeerInfo(tokens[0], tokens[1], tokens[2]));
