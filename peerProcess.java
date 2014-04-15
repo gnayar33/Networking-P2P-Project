@@ -17,7 +17,7 @@ public class peerProcess {
 	private boolean hasFile;
 	private byte[] bitfield;
 	
-	ArrayList<Socket> socketList = new ArrayList<Socket>();
+	HashMap<Integer, Socket> socketList = new HashMap<Integer, Socket>();
 	private HashSet<Integer> interestedList = new HashSet<Integer>();		//maybe hashmap with downloading rate
 	private HashSet<Integer> preferredNeighbors = new HashSet<Integer>(numPrefNeighbors);
 	private HashSet<Integer> connections = new HashSet<Integer>();
@@ -49,7 +49,7 @@ public class peerProcess {
 			RemotePeerInfo peerInfo = peerInfoVector.get(i - 1);
 			try {
 				Socket clientSocket = new Socket(peerInfo.peerAddress, Integer.parseInt(peerInfo.peerPort));
-				socketList.add(clientSocket);
+				socketList.put(Integer.parseInt(peerInfo.peerId), clientSocket);
 			}
 			catch(Exception e) {}
 		}

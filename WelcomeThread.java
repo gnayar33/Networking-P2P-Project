@@ -15,20 +15,22 @@ public class WelcomeThread extends Thread {
 	}
 	public void run() {
 		try {
-			File file = new File("/cise/homes/mpham/" + peerID + ".txt");
+			String path = System.getProperty("user.dir");
+			File file = new File(path + "/out.txt");
 			if(!file.exists()) file.createNewFile();
-			FileWriter fw = new FileWriter(file.getAbsoluteFile());
+			FileWriter fw = new FileWriter(file.getAbsoluteFile(), true);
 			BufferedWriter bw = new BufferedWriter(fw);
+			bw.write(peerID + ": setting up serversocket\n");
 			ServerSocket welcomeSocket = new ServerSocket(welcomeSocketNumber);
 			int numConnectionsMade = 0;
 			while(numConnectionsMade < (numPeers - pos)) {		//figure out how many connections need to be made
 				Socket connectionSocket = welcomeSocket.accept();
-				pp.socketList.add(connectionSocket);
+				//pp.socketList.put(connectionSocket);
 				numConnectionsMade++;
-				bw.write("connection received\n");
+				bw.write(peerID + ": connection received from " + connectionSocket.getRemoteSocketAddress() + "\n");
 			}
 			welcomeSocket.close();
-			bw.write("Closing welcome socket for peer: "+peerID + "\n");
+			bw.write(peerID + ": Closing welcome socket for peer: "+peerID + "\n");
 			bw.close();
 		}
 		catch(Exception e){
