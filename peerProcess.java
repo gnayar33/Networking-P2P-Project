@@ -1,5 +1,6 @@
 import java.io.*;
 import java.util.*;
+import java.net.*;
 
 public class peerProcess {
 
@@ -22,10 +23,29 @@ public class peerProcess {
 
 	public static void main(String[] args) {
 		peerProcess pp = new peerProcess();
+		if(args.length != 1) {
+			System.out.println("usage: java peerProcess [peerID]");
+			System.exit(0);
+		}
 		pp.peerId = Integer.parseInt(args[0]);
 		pp.getCommonConfiguration();
 		pp.getPeerInfoConfiguration();
+		
+		pp.setUpServer();
+		System.out.println("hi from " + pp.peerId);
+
+		for(int i = 0; i < pp.peerInfoVector.size(); i++) {
+			if(Integer.parseInt(pp.peerInfoVector.get(i).peerId) == pp.peerId) {
+				break;
+			}
+		}
+
 		pp.receiveMessage();
+	}
+
+	public void setUpServer() {
+		ServerSocket welcomeSocket;
+		Socket connectionSocket;
 	}
 
 	public void receiveMessage() {
@@ -164,44 +184,45 @@ public class peerProcess {
 			while((st = in.readLine()) != null) {
 				
 				String[] tokens = st.split("\\s+");
-		    	//System.out.println("tokens begin ----");
-			    //for (int x=0; x<tokens.length; x++) {
-			    //    System.out.println(tokens[x]);
-			    //}
-		        //System.out.println("tokens end ----");
+		    		/*System.out.println("tokens begin ----");
+				for (int x=0; x<tokens.length; x++) {
+					System.out.println(tokens[x]);
+				}
+				System.out.println("tokens end ----");*/
 			
 				if(Integer.parseInt(tokens[0]) == peerId) {
 					hostName = tokens[1];
 					port = Integer.parseInt(tokens[2]);
 					int numPieces = fileSize / pieceSize;
-		        	if(fileSize % pieceSize > 0)
+		        		if(fileSize % pieceSize > 0)
 		        		numPieces += 1;
-		        	int numBytes = numPieces / 8;
-		        	int leftover = numPieces % 8;
-		        	if(leftover > 0) {
-		        		numBytes += 1;
-		        	}
-		        	bitfield = new byte[numBytes];
-		        	
-		        	if(Integer.parseInt(tokens[3]) == 1) {		//set bitfield to 1 if this peer has file. test this
-		        		hasFile = true;
-		        		Arrays.fill(bitfield, (byte) 0xFF);
-		        		byte lastByte = 0;
-		        		for(int i = 0; i < leftover; i++) {
-		        			lastByte |= 1 << (8 - i);
+		        		int numBytes = numPieces / 8;
+		        		int leftover = numPieces % 8;
+		        		if(leftover > 0) {
+		        			numBytes += 1;
 		        		}
+		        		bitfield = new byte[numBytes];
+
+		        		if(Integer.parseInt(tokens[3]) == 1) {		//set bitfield to 1 if this peer has file. test this
+						hasFile = true;
+		        			Arrays.fill(bitfield, (byte) 0xFF);
+		     		   		byte lastByte = 0;
+		    	    			for(int i = 0; i < leftover; i++) {
+		        				lastByte |= 1 << (8 - i);
+		        			}
 		        		
-		        		bitfield[numBytes - 1] = lastByte;
-		        		
-		        	}
-		        	else {
-		        		hasFile = false;
-		        		Arrays.fill(bitfield, (byte) 0x00);
-		        	}
-		        	break;
-		        }
-		        
-			    peerInfoVector.addElement(new RemotePeerInfo(tokens[0], tokens[1], tokens[2]));
+		        			bitfield[numBytes - 1] = lastByte;
+		        			
+		        		}
+		        		else {
+		        			hasFile = false;
+		        			Arrays.fill(bitfield, (byte) 0x00);
+		        		}
+		        		break;
+				}
+				else {
+					peerInfoVector.addElement(new RemotePeerInfo(tokens[0], tokens[1], tokens[2]));
+				}
 			}
 			
 			in.close();
