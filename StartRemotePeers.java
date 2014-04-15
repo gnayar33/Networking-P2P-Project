@@ -69,7 +69,7 @@ public class StartRemotePeers {
 				// If your program is JAVA, use this line.
 				try {
 				Process p = Runtime.getRuntime().exec("ssh -o StrictHostKeyChecking=no " + pInfo.peerAddress + " cd " + path + "; java peerProcess " + pInfo.peerId);
-				PrintStream out = new PrintStream(p.getOutputStream());
+				/*PrintStream out = new PrintStream(p.getOutputStream());
 				BufferedReader in = new BufferedReader(new InputStreamReader(p.getInputStream()));
 				BufferedReader er = new BufferedReader(new InputStreamReader(p.getErrorStream()));
 				String n = null;
@@ -80,7 +80,7 @@ public class StartRemotePeers {
 				while((s = in.readLine()) != null) {
 					System.out.println(s);
 				}
-				out.println("exit");
+				out.println("exit");*/
 				}
 				catch(Exception e) {System.out.println(e);}
 

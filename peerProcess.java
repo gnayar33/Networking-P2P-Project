@@ -40,7 +40,7 @@ public class peerProcess {
 			}
 		}
 
-		pp.receiveMessage();
+		//pp.receiveMessage();
 	}
 
 	public void setUpServer() {
