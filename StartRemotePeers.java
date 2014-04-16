@@ -53,8 +53,6 @@ public class StartRemotePeers {
 	public static void main(String[] args) {
 		// TODO Auto-generated method stub
 		try {
-			//ArrayList<BufferedReader> inlist = new ArrayList<BufferedReader>();
-			//ArrayList<BufferedReader> erlist = new ArrayList<BufferedReader>();
 			StartRemotePeers myStart = new StartRemotePeers();
 			myStart.getConfiguration();
 					
@@ -69,13 +67,10 @@ public class StartRemotePeers {
 				
 				// *********************** IMPORTANT *************************** //
 				// If your program is JAVA, use this line.
-				try {
 				Process p = Runtime.getRuntime().exec("ssh -o StrictHostKeyChecking=no " + pInfo.peerAddress + " cd " + path + "; java peerProcess " + pInfo.peerId);
 				/*PrintStream out = new PrintStream(p.getOutputStream());
 				BufferedReader in = new BufferedReader(new InputStreamReader(p.getInputStream()));
 				BufferedReader er = new BufferedReader(new InputStreamReader(p.getErrorStream()));
-				//inlist.add(in);
-				//erlist.add(er);
 				String n = null;
 				while((n = er.readLine()) != null) {
 					System.out.println(n);
@@ -85,28 +80,13 @@ public class StartRemotePeers {
 					System.out.println(s);
 				}
 				//out.println("exit");*/
-				}
-				catch(Exception e) {System.out.println(e);}
+				Thread.sleep(1000);
 
 				// If your program is C/C++, use this line instead of the above line. 
 				//Runtime.getRuntime().exec("ssh " + pInfo.peerAddress + " cd " + path + "; ./peerProcess " + pInfo.peerId);
 			}
-			/*while(true) {
-				System.out.println("working");
-				for(int i = 0; i < inlist.size(); i++) {
-					BufferedReader in = inlist.get(i);
-					BufferedReader er = erlist.get(i);
-					String n = null;
-					while((n = er.readLine()) != null) {
-						System.out.println(n);
-					}
-					String s = null;
-					while((s = in.readLine()) != null) {
-						System.out.println(s);
-					}
-				}
-			}*/
-			//System.out.println("Starting all remote peers has done." );
+			
+			System.out.println("Starting all remote peers has done." );
 
 		}
 		catch (Exception ex) {
