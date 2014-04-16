@@ -29,7 +29,8 @@ public class WelcomeThread extends Thread {
 			int numConnectionsMade = 0;
 			while(numConnectionsMade < (numPeers - pos)) {		//figure out how many connections need to be made
 				Socket connectionSocket = welcomeSocket.accept();
-				pp.socketList.add(connectionSocket);
+				int fromPeerID = pp.addressToPeerID.get(connectionSocket.getInetAddress().getCanonicalHostName());
+				pp.peerIDToSocket.put(fromPeerID,connectionSocket);
 				numConnectionsMade++;
 				// fw = new FileWriter(file.getAbsoluteFile(), true);
 				// bw = new BufferedWriter(fw);

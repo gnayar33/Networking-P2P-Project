@@ -1,7 +1,6 @@
 import java.io.*;
 import java.util.*;
 import java.net.*;
-import java.util.Timer;
 
 public class peerProcess {
 
@@ -18,7 +17,8 @@ public class peerProcess {
 	private boolean hasFile;
 	private byte[] bitfield;
 	
-	ArrayList<Socket> socketList = new ArrayList<Socket>();
+	public HashMap<String, Integer> addressToPeerID = new HashMap<String, Integer>();
+	public HashMap<Integer, Socket> peerIDToSocket = new HashMap<Integer, Socket>();
 	private HashSet<Integer> interestedList = new HashSet<Integer>();		//maybe hashmap with downloading rate
 	private HashSet<Integer> preferredNeighbors = new HashSet<Integer>(numPrefNeighbors);
 	private HashSet<Integer> connections = new HashSet<Integer>();
@@ -34,22 +34,34 @@ public class peerProcess {
 		pp.getCommonConfiguration();
 		pp.getPeerInfoConfiguration();
 		//System.out.println("hi from " + pp.peerId + " pos " + pp.pos + " peerInfo Size " + pp.peerInfoVector.size() + " numPeers " + pp.numPeers);
-		
-		pp.setUpServer();
-		pp.setUpClient();
-		
+		try{
+			pp.setUpServer();
+			pp.setUpClient();
+			String path = System.getProperty("user.dir");
+			File file = new File(path + "/" + pp.peerId + ".txt");
+			if(!file.exists()) file.createNewFile();
+			FileWriter fw = new FileWriter(file.getAbsoluteFile());
+			BufferedWriter bw = new BufferedWriter(fw);
+			bw.write("Starting wait\n");
+			bw.close();	
+		}catch(IOException e){
+
+		}
+
+
 		long startTime = System.currentTimeMillis();
-		while(pp.socketList.size() < pp.numPeers-1){
+		while(pp.peerIDToSocket.size() < pp.numPeers-1){
 			try{Thread.sleep(1000);}catch(Exception e){}
 			long endTime = System.currentTimeMillis();
-			if((endTime-startTime)>40000){
+			if((endTime-startTime)>10000){
 				break;
 			}
 		}
 		pp.printConnections();
 		try {
-			for(int i = 0; i < pp.socketList.size(); i++) {
-				(pp.socketList).get(i).close();
+			for(int p: pp.peerIDToSocket.keySet()) {
+				while(!(pp.peerIDToSocket.get(p).isClosed()))
+				pp.peerIDToSocket.get(p).close();
 			}
 			Runtime.getRuntime().exec("exit");
 		}
@@ -66,7 +78,7 @@ public class peerProcess {
 			RemotePeerInfo peerInfo = peerInfoVector.get(i - 1);
 			try {
 				Socket clientSocket = new Socket(peerInfo.peerAddress, Integer.parseInt(peerInfo.peerPort));
-				socketList.add(clientSocket);
+				peerIDToSocket.put(Integer.parseInt(peerInfo.peerId), clientSocket);
 			}
 			catch(Exception e) {}
 		}
@@ -77,12 +89,11 @@ public class peerProcess {
 			String path = System.getProperty("user.dir");
 			File file = new File(path + "/" + peerId + ".txt");
 			if(!file.exists()) file.createNewFile();
-			FileWriter fw = new FileWriter(file.getAbsoluteFile());
+			FileWriter fw = new FileWriter(file.getAbsoluteFile(),true);
 			BufferedWriter bw = new BufferedWriter(fw);
-			bw.write("Sockets active: "+socketList.size()+" ID: "+peerId+"/"+numPeers+"\n");
-			for(int i = 0;i<socketList.size();i++){
-				Socket connectionSocket = socketList.get(i);
-				bw.write(peerId + ": connection received from " + connectionSocket.getInetAddress().getCanonicalHostName() + "\n");
+			bw.write("Sockets active: "+peerIDToSocket.size()+" ID: "+peerId+"/"+numPeers+"\n");
+			for(Integer p: peerIDToSocket.keySet()){
+				bw.write(p +": address"+peerIDToSocket.get(p).getInetAddress().getCanonicalHostName()+"\n");
 			}
 			bw.close();
 		}catch(IOException e){
@@ -265,6 +276,7 @@ public class peerProcess {
 				}
 				else {
 					peerInfoVector.addElement(new RemotePeerInfo(tokens[0], tokens[1], tokens[2]));
+					addressToPeerID.put(tokens[1],Integer.parseInt(tokens[0]));
 				}
 			}
 			
