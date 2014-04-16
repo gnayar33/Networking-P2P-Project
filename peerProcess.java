@@ -19,10 +19,12 @@ public class peerProcess {
 	
 	public HashMap<String, Integer> addressToPeerID = new HashMap<String, Integer>();
 	public HashMap<Integer, Socket> peerIDToSocket = new HashMap<Integer, Socket>();
+	public ArrayList<Integer> handshakeRec = new ArrayList<Integer>();
 	private HashSet<Integer> interestedList = new HashSet<Integer>();		//maybe hashmap with downloading rate
 	private HashSet<Integer> preferredNeighbors = new HashSet<Integer>(numPrefNeighbors);
 	private HashSet<Integer> connections = new HashSet<Integer>();
 	private Vector<RemotePeerInfo> peerInfoVector;
+
 
 	public static void main(String[] args) {
 		peerProcess pp = new peerProcess();
@@ -43,6 +45,7 @@ public class peerProcess {
 			FileWriter fw = new FileWriter(file.getAbsoluteFile());
 			BufferedWriter bw = new BufferedWriter(fw);
 			bw.write("Starting wait\n");
+
 			bw.close();	
 		}catch(IOException e){
 
@@ -77,8 +80,10 @@ public class peerProcess {
 		for(int i = 1; i < pos; i++) {
 			RemotePeerInfo peerInfo = peerInfoVector.get(i - 1);
 			try {
+				int destination = Integer.parseInt(peerInfo.peerId);
 				Socket clientSocket = new Socket(peerInfo.peerAddress, Integer.parseInt(peerInfo.peerPort));
-				peerIDToSocket.put(Integer.parseInt(peerInfo.peerId), clientSocket);
+				peerIDToSocket.put(destination, clientSocket);
+				sendHandshake(destination);
 			}
 			catch(Exception e) {}
 		}
@@ -95,6 +100,10 @@ public class peerProcess {
 			for(Integer p: peerIDToSocket.keySet()){
 				bw.write(p +": address"+peerIDToSocket.get(p).getInetAddress().getCanonicalHostName()+"\n");
 			}
+			bw.write("number of handshakes: " + handshakeRec.size()+"\n");
+			for(int i = 0; i<handshakeRec.size();i++){
+				bw.write(handshakeRec.get(i)+"\n");
+			}
 			bw.close();
 		}catch(IOException e){
 
@@ -108,7 +117,7 @@ public class peerProcess {
 		byte[] header = Arrays.copyOfRange(message, 0, 5);
 		String headerString = Arrays.toString(header);
 		if(headerString.equals("HELLO")) {	//handshake
-			sendHandshake();
+			//sendHandshake();
 			//send bitfield to peer
 			//store peerID in connection list
 		}
@@ -150,7 +159,13 @@ public class peerProcess {
 		return result;
 	}
 	
-	public void sendHandshake() {
+	public void sendHandshake(int toPeerID) {
+		Socket temp = peerIDToSocket.get(toPeerID);
+		try{
+			OutputStream out = temp.getOutputStream();
+			out.write((new HandshakeMessage(this.peerId)).toByteArray());
+			out.close();
+		}catch(Exception e){}
 		
 	}
 	
