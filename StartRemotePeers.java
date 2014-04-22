@@ -86,6 +86,7 @@ public class StartRemotePeers {
 				//Runtime.getRuntime().exec("ssh " + pInfo.peerAddress + " cd " + path + "; ./peerProcess " + pInfo.peerId);
 			}
 			
+			Thread.sleep(5000);
 			System.out.println("Starting all remote peers has done." );
 
 		}

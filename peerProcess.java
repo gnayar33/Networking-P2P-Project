@@ -1,5 +1,6 @@
 import java.io.*;
 import java.util.*;
+import java.util.concurrent.*;
 import java.net.*;
 
 public class peerProcess {
@@ -16,15 +17,19 @@ public class peerProcess {
 	private int pieceSize;
 	private boolean hasFile;
 	private byte[] bitfield;
+	private long startTime;
+	private long timeInterval;
 	
 	public HashMap<String, Integer> addressToPeerID = new HashMap<String, Integer>();
-	public HashMap<Integer, Socket> peerIDToSocket = new HashMap<Integer, Socket>();
-	public ArrayList<Integer> handshakeRec = new ArrayList<Integer>();
-	private HashSet<Integer> interestedList = new HashSet<Integer>();		//maybe hashmap with downloading rate
-	private HashSet<Integer> preferredNeighbors = new HashSet<Integer>(numPrefNeighbors);
+	public ConcurrentHashMap<Integer, Socket> peerIDToSocket = new ConcurrentHashMap<Integer, Socket>();
+	public ArrayList<Integer> handshakeSent = new ArrayList<Integer>();
+	private HashSet<Integer> interestedList = new HashSet<Integer>();
+	private HashMap<Integer, Integer> neighbors = new HashMap<Integer, Integer>();	//sort by data transmission rate. peer id map to downloading rate
+	private HashMap<Integer, Integer> unchokeList = new HashMap<Integer, Integer>(numPrefNeighbors);	//peers that are unchoked
+	private HashSet<Integer> chokedByList = new HashSet<Integer>();
+	private HashMap<Integer, byte[]> bitfields = new HashMap<Integer, byte[]>();
 	private HashSet<Integer> connections = new HashSet<Integer>();
 	private Vector<RemotePeerInfo> peerInfoVector;
-
 
 	public static void main(String[] args) {
 		peerProcess pp = new peerProcess();
@@ -47,19 +52,60 @@ public class peerProcess {
 			bw.write("Starting wait\n");
 
 			bw.close();	
-		}catch(IOException e){
+		}catch(Exception e){}
 
+		try {
+			long startTime = System.currentTimeMillis();
+			while(System.currentTimeMillis() - startTime < 10000) {	//should be not all peers have file
+				long currentTime = System.currentTimeMillis();
+				if(currentTime - startTime >= pp.unchokingInterval * 1000) {
+					pp.unchoke();
+				}
+				if(currentTime - startTime >= pp.optimisticUnchokingInterval * 1000) {
+					pp.optimisticUnchoke();
+				}
+				for(int p: pp.peerIDToSocket.keySet()) {
+					InputStream in = pp.peerIDToSocket.get(p).getInputStream();
+					if(in.available() >= 5) {
+						byte[] header = new byte[5];
+						in.read(header);
+						String headerString = new String(header);
+						String hello = new String(new byte[] {72, 69, 76, 76, 79});
+						String path = System.getProperty("user.dir");
+						File file = new File(path + "/" + pp.peerId + ".txt");
+						if(!file.exists()) file.createNewFile();
+						FileWriter fw = new FileWriter(file.getAbsoluteFile(),true);
+						BufferedWriter bw = new BufferedWriter(fw);
+						bw.write("Header: " + headerString + " Size: " + in.available() + "\n");
+						bw.close();
+						pp.interpretMessage(header, in, p);
+					}
+				}
+			}
+		}
+		catch(Exception e) {
+			try {
+				String path = System.getProperty("user.dir");
+				File file = new File(path + "/" + pp.peerId + ".txt");
+				if(!file.exists()) file.createNewFile();
+				FileWriter fw = new FileWriter(file.getAbsoluteFile(),true);
+				PrintWriter pw = new PrintWriter(fw);
+				pw.println("EXCEPTION loop: ");
+				e.printStackTrace(pw);
+				//pw.write("EXCEPTION loop: " + e.toString() + "\n");
+				pw.close();
+			}
+			catch(IOException ex) {}
 		}
 
-
-		long startTime = System.currentTimeMillis();
+		/*long startTime = System.currentTimeMillis();
 		while(pp.peerIDToSocket.size() < pp.numPeers-1){
 			try{Thread.sleep(1000);}catch(Exception e){}
 			long endTime = System.currentTimeMillis();
-			if((endTime-startTime)>10000){
+			if((endTime-startTime)>10000) {
 				break;
 			}
-		}
+		}*/
 		pp.printConnections();
 		try {
 			for(int p: pp.peerIDToSocket.keySet()) {
@@ -69,23 +115,20 @@ public class peerProcess {
 			Runtime.getRuntime().exec("exit");
 		}
 		catch(Exception e) {}
-		//pp.receiveMessage();
 	}
 
 	public void setUpServer() {
 		(new WelcomeThread(port, pos, numPeers, peerId, this)).start();
 	}
 	
-	public void setUpClient() {
+	public void setUpClient() throws Exception{
 		for(int i = 1; i < pos; i++) {
 			RemotePeerInfo peerInfo = peerInfoVector.get(i - 1);
-			try {
-				int destination = Integer.parseInt(peerInfo.peerId);
-				Socket clientSocket = new Socket(peerInfo.peerAddress, Integer.parseInt(peerInfo.peerPort));
-				peerIDToSocket.put(destination, clientSocket);
-				sendHandshake(destination);
-			}
-			catch(Exception e) {}
+			int destination = Integer.parseInt(peerInfo.peerId);
+			Socket clientSocket = new Socket(peerInfo.peerAddress, Integer.parseInt(peerInfo.peerPort));
+			peerIDToSocket.put(destination, clientSocket);
+			handshakeSent.add(destination);
+			sendHandshake(destination);
 		}
 	}
 
@@ -100,9 +143,13 @@ public class peerProcess {
 			for(Integer p: peerIDToSocket.keySet()){
 				bw.write(p +": address"+peerIDToSocket.get(p).getInetAddress().getCanonicalHostName()+"\n");
 			}
-			bw.write("number of handshakes: " + handshakeRec.size()+"\n");
-			for(int i = 0; i<handshakeRec.size();i++){
-				bw.write(handshakeRec.get(i)+"\n");
+			bw.write("number of handshakes: " + handshakeSent.size()+"\n");
+			for(int i = 0; i<handshakeSent.size();i++){
+				bw.write(handshakeSent.get(i)+"\n");
+			}
+			bw.write("interested: \n");
+			for(int i : interestedList){
+				bw.write(i + "\n");
 			}
 			bw.close();
 		}catch(IOException e){
@@ -111,27 +158,49 @@ public class peerProcess {
 
 	}
 
-	public void receiveMessage() {
-		byte[] message = new byte[32];		//received from socket
-		byte messageType = message[4];
-		byte[] header = Arrays.copyOfRange(message, 0, 5);
-		String headerString = Arrays.toString(header);
+	public void interpretMessage(byte[] header, InputStream in, int peerID) throws Exception{
+		byte messageType = header[4];
+		String headerString = new String(header);
 		if(headerString.equals("HELLO")) {	//handshake
-			//sendHandshake();
-			//send bitfield to peer
-			//store peerID in connection list
+			byte[] peerIdBytes = new byte[4];
+			byte[] message = new byte[27];
+			in.read(message);
+			System.arraycopy(message,23,peerIdBytes,0,4);
+			int receivedPeerID = HandshakeMessage.byteArrayToInt(peerIdBytes);
+			if(!handshakeSent.contains(receivedPeerID)) {
+				handshakeSent.add(receivedPeerID);
+				sendHandshake(receivedPeerID);
+			}
+			sendBitfield(receivedPeerID);
 		}
 		else if(messageType == 0) {	//choke
-			
+			chokedByList.add(peerID);
 		}
 		else if(messageType == 1) {	//unchoke
-			request();
+			chokedByList.remove(peerID);
+			byte[] peerBitfield = bitfields.get(peerID);
+			if(checkBitfield(peerBitfield)) {
+				ArrayList<Integer> pieces = new ArrayList<Integer>();
+				for(int i = 0; i < peerBitfield.length - 1; i++) {
+					for(int j = 0; j < 8; j++) {
+						byte mask = (byte) (1 << j);
+						if(((bitfield[i] & mask) == 0) && ((peerBitfield[i] & mask) == mask)) {
+							pieces.add(i * 8 + j);
+						}
+					}
+				}
+				int pieceIndex = (int) (Math.random() * pieces.size());
+				sendRequest(peerID, pieces.get(pieceIndex));
+			}
+			else {
+				sendNotInterested(peerID);
+			}
 		}
 		else if(messageType == 2) {	//interested
-			//add peer to interested list
+			interestedList.add(peerID);
 		}
 		else if(messageType == 3) {	//not interested
-			//remove peer from interested list
+			interestedList.remove(peerID);
 		}
 		else if(messageType == 4) {	//have
 			//update bitfield of neighbor
@@ -140,8 +209,14 @@ public class peerProcess {
 			//else, send not interested message
 		}
 		else if(messageType == 5) {	//bitfield
-			//update bitfield of neighbor
+			int messageLength = Message.byteArrayToInt(new byte[] {header[0], header[1], header[2], header[3]});
+			byte[] peerBitfield = new byte[messageLength - 1];
+			in.read(peerBitfield);
+			bitfields.put(peerID, peerBitfield);	//update bitfield of neighbor
 			//check bitfield to see if this peer wants any pieces
+			if(checkBitfield(peerBitfield)) {
+				sendInterested(peerID);
+			}
 			//send interested message if so
 			//else, send not interested message
 		}
@@ -153,34 +228,104 @@ public class peerProcess {
 		}
 	}
 	
-	public boolean checkBitfield(byte[] bitfield) {
+	public boolean checkBitfield(byte[] peerBitfield) {
 		boolean result = false;
-		//returns true if bitfield has a 1 where this.bitfield has a 0
+		for(int i = 0; i < peerBitfield.length - 1; i++) {
+			if(result) {
+				break;
+			}
+			for(int j = 0; j < 8; j++) {
+				byte mask = (byte) (1 << j);
+				if(((bitfield[i] & mask) == 0) && ((peerBitfield[i] & mask) == mask)) {
+					result = true;
+					break;
+				}
+			}
+		}
 		return result;
 	}
 	
-	public void sendHandshake(int toPeerID) {
-		Socket temp = peerIDToSocket.get(toPeerID);
-		try{
-			OutputStream out = temp.getOutputStream();
-			out.write((new HandshakeMessage(this.peerId)).toByteArray());
-			out.close();
-		}catch(Exception e){}
-		
+	public void sendHandshake(int toPeerID) throws Exception {
+		OutputStream out = peerIDToSocket.get(toPeerID).getOutputStream();
+		out.write((new HandshakeMessage(this.peerId)).toByteArray());
 	}
 	
-	public void sendMessage() {
-		
+	public void sendBitfield(int toPeerID) throws Exception {
+		OutputStream out = peerIDToSocket.get(toPeerID).getOutputStream();
+		out.write((new BitfieldMessage(this.bitfield)).toByteArray());
 	}
 	
-	public void choke(int peerId) {
-		//send choke message to peer with peerId
-		//remove from preferred neighbor list
-		//
+	public void sendInterested(int toPeerID) throws Exception {
+		OutputStream out = peerIDToSocket.get(toPeerID).getOutputStream();
+		out.write((new InterestedMessage()).toByteArray());
 	}
 	
-	public void unchoke() {
-		//called every y seconds
+	public void sendNotInterested(int toPeerID) throws Exception {
+		OutputStream out = peerIDToSocket.get(toPeerID).getOutputStream();
+		out.write((new NotInterestedMessage()).toByteArray());
+	}
+	
+	public void sendChoke(int toPeerID) throws Exception{
+		OutputStream out = peerIDToSocket.get(toPeerID).getOutputStream();
+		out.write((new ChokeMessage()).toByteArray());
+	}
+	
+	public void sendUnchoke(int toPeerID) throws Exception{
+		OutputStream out = peerIDToSocket.get(toPeerID).getOutputStream();
+		out.write((new UnchokeMessage()).toByteArray());
+	}
+	
+	public void sendRequest(int toPeerID, int pieceIndex) throws Exception{
+		OutputStream out = peerIDToSocket.get(toPeerID).getOutputStream();
+		out.write((new RequestMessage(pieceIndex)).toByteArray());
+	}
+	
+	public void unchoke() throws Exception{
+		if(!hasFile) {
+			LinkedHashMap<Integer, Integer> sortedNeighbors = sortByDLRate(neighbors);
+			
+			for(int i : unchokeList.keySet()) {
+				unchokeList.put(i, 0);
+			}
+			
+			int count = 0;
+			for(int i : sortedNeighbors.keySet()) {
+				if(interestedList.contains(i)) {
+					count++;
+					neighbors.put(i, 0);	//reset download rate
+					if(!unchokeList.containsKey(i)) {
+						sendUnchoke(i);
+					}
+					unchokeList.put(i, 1);
+				}
+				if(count >= numPrefNeighbors) {
+					break;
+				}
+			}
+			for(int i : unchokeList.keySet()) {
+				if(unchokeList.get(i) == 0) {
+					sendChoke(i);
+					unchokeList.remove(i);
+				}
+			}
+		}
+		else {	//randomly choose
+			for(int i : unchokeList.keySet()) {
+				sendChoke(i);
+			}
+			unchokeList.clear();
+			for(int i = 0; i < numPrefNeighbors; i++) {
+				int peerID, randIndex;
+				do {
+					randIndex = (int) (Math.random() * peerInfoVector.size());
+					peerID = Integer.parseInt(peerInfoVector.get(randIndex).peerId);
+				}
+				while(!interestedList.contains(peerID));
+				unchokeList.put(peerID, 1);
+				sendUnchoke(peerID);
+			}
+		}
+		//called every unchokingInterval seconds
 		//pick k neighbors from interested list giving most data to this peer
 		//or randomly if this peer has complete file
 		//add to preferred neighbor list if not in already
@@ -190,8 +335,14 @@ public class peerProcess {
 	
 	public void optimisticUnchoke() {
 		//called every x seconds
-		//choke previous optimistically unchoked neighbor unless in preferred neighbor list
 		//randomly unchoke neighbor in interested list
+		int peerID, randIndex;
+		do {
+			randIndex = (int) (Math.random() * peerInfoVector.size());
+			peerID = Integer.parseInt(peerInfoVector.get(randIndex).peerId);
+		}
+		while(!interestedList.contains(peerID));
+		unchokeList.put(peerID, 1);
 		//may become preferred neighbor
 	}
 	
@@ -265,7 +416,7 @@ public class peerProcess {
 					port = Integer.parseInt(tokens[2]);
 					int numPieces = fileSize / pieceSize;
 		        		if(fileSize % pieceSize > 0)
-		        		numPieces += 1;
+		        			numPieces += 1;
 		        		int numBytes = numPieces / 8;
 		        		int leftover = numPieces % 8;
 		        		if(leftover > 0) {
@@ -294,11 +445,39 @@ public class peerProcess {
 					addressToPeerID.put(tokens[1],Integer.parseInt(tokens[0]));
 				}
 			}
-			
 			in.close();
 		}
 		catch (Exception ex) {
 			System.out.println(ex.toString());
 		}
+	}
+	
+	public LinkedHashMap<Integer, Integer> sortByDLRate(HashMap<Integer, Integer> passedMap) {
+		ArrayList<Integer> mapKeys = new ArrayList<Integer>(passedMap.keySet());
+		ArrayList<Integer> mapValues = new ArrayList<Integer>(passedMap.values());
+		Collections.sort(mapValues);
+		Collections.sort(mapKeys);
+	
+		LinkedHashMap<Integer, Integer> sortedMap = new LinkedHashMap<Integer, Integer>();
+	    
+		Iterator<Integer> valueIt = mapValues.iterator();
+		while (valueIt.hasNext()) {
+			int val = valueIt.next();
+			Iterator<Integer> keyIt = mapKeys.iterator();
+		
+			while (keyIt.hasNext()) {
+				int key = keyIt.next();
+				int comp1 = passedMap.get(key);
+				int comp2 = val;
+		
+				if (comp1 == comp2) {
+					passedMap.remove(key);
+					mapKeys.remove(key);
+					sortedMap.put(key, val);
+					break;
+			    	}
+			}
+	    	}
+	    	return sortedMap;
 	}
 }
