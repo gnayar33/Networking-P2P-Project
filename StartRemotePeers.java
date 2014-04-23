@@ -80,13 +80,13 @@ public class StartRemotePeers {
 					System.out.println(s);
 				}
 				//out.println("exit");*/
-				Thread.sleep(1000);
+				Thread.sleep(1500);
 
 				// If your program is C/C++, use this line instead of the above line. 
 				//Runtime.getRuntime().exec("ssh " + pInfo.peerAddress + " cd " + path + "; ./peerProcess " + pInfo.peerId);
 			}
 			
-			Thread.sleep(5000);
+			Thread.sleep(10000);
 			System.out.println("Starting all remote peers has done." );
 
 		}
