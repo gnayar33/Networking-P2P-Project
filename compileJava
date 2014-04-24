@@ -12,3 +12,4 @@ javac RemotePeerInfo.java
 javac RequestMessage.java
 javac UnchokeMessage.java
 javac WelcomeThread.java
+javac StartRemotePeers.java
