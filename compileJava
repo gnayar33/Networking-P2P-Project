@@ -1,2 +1,14 @@
+javac BitfieldMessage.java
+javac ChokeMessage.java
+javac HandshakeMessage.java
+javac HaveMessage.java
+javac InterestedMessage.java
+javac Message.java
+javac MyFormatter.java
+javac NotInterestedMessage.java
+javac peerProcess.java
+javac PieceMessage.java
 javac RemotePeerInfo.java
-javac StartRemotePeers.java
+javac RequestMessage.java
+javac UnchokeMessage.java
+javac WelcomeThread.java

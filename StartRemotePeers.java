@@ -68,25 +68,11 @@ public class StartRemotePeers {
 				// *********************** IMPORTANT *************************** //
 				// If your program is JAVA, use this line.
 				Process p = Runtime.getRuntime().exec("ssh -o StrictHostKeyChecking=no " + pInfo.peerAddress + " cd " + path + "; java peerProcess " + pInfo.peerId);
-				/*PrintStream out = new PrintStream(p.getOutputStream());
-				BufferedReader in = new BufferedReader(new InputStreamReader(p.getInputStream()));
-				BufferedReader er = new BufferedReader(new InputStreamReader(p.getErrorStream()));
-				String n = null;
-				while((n = er.readLine()) != null) {
-					System.out.println(n);
-				}
-				String s = null;
-				while((s = in.readLine()) != null) {
-					System.out.println(s);
-				}
-				//out.println("exit");*/
 				Thread.sleep(1500);
 
 				// If your program is C/C++, use this line instead of the above line. 
 				//Runtime.getRuntime().exec("ssh " + pInfo.peerAddress + " cd " + path + "; ./peerProcess " + pInfo.peerId);
 			}
-			
-			Thread.sleep(10000);
 			System.out.println("Starting all remote peers has done." );
 
 		}

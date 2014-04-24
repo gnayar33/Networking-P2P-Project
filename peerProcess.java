@@ -18,6 +18,7 @@ public class peerProcess {
 	private int pieceSize;
 	private int numPieces;
 	private int numPiecesRec;
+	private int bitfieldLength;
 	
 	private boolean hasFile;
 	private byte[] bitfield;
@@ -40,9 +41,6 @@ public class peerProcess {
 	Logger l = Logger.getLogger("");
 
 	public static void main(String[] args) {
-		
-		
-		
 		peerProcess pp = new peerProcess();
 		if(args.length != 1) {
 			System.out.println("usage: java peerProcess [peerID]");
@@ -54,8 +52,9 @@ public class peerProcess {
 		
 		
 		try{
-			FileHandler fh = new FileHandler("log/log_peer_" + pp.peerId + ".log",false);
-			fh.setFormatter(new SimpleFormatter());
+			FileHandler fh = new FileHandler("log_peer_" + pp.peerId + ".log",false);
+			fh.setFormatter(new MyFormatter());
+			//fh.setFormatter(new SimpleFormatter());
 			pp.l.addHandler(fh);
 		}
 		catch(Exception e){}
@@ -74,7 +73,6 @@ public class peerProcess {
 				fis.read(lastPiece);
 				pp.theFile[pp.numPieces - 1] = lastPiece;
 				fis.close();
-				pp.l.log(Level.INFO,"have file, wrote to byte array");
 				pp.numPiecesRec = pp.numPieces;
 			}
 			else {
@@ -86,8 +84,7 @@ public class peerProcess {
 		//System.out.println("hi from " + pp.peerId + " pos " + pp.pos + " peerInfo Size " + pp.peerInfoVector.size() + " numPeers " + pp.numPeers);
 		try{
 			pp.setUpServer();
-			pp.setUpClient();
-			pp.l.log(Level.WARNING, "Sockets should be set up");	
+			pp.setUpClient();	
 		}catch(Exception e) {
 			StringWriter sw = new StringWriter();
 			e.printStackTrace(new PrintWriter(sw));
@@ -116,12 +113,10 @@ public class peerProcess {
 			while(!pp.allHaveFile()) {	//should be not all peers have file
 				long currentTime = System.currentTimeMillis();
 				if(currentTime - unchokeTime >= pp.unchokingInterval * 1000) {
-					pp.l.log(Level.WARNING, "REGULAR UNCHOKE TIME DIFFERENCE: " + (currentTime - unchokeTime));
 					unchokeTime = System.currentTimeMillis();
 					pp.unchoke();
 				}
 				if(currentTime - optUnchokeTime >= pp.optimisticUnchokingInterval * 1000) {
-					pp.l.log(Level.WARNING, "OPT UNCHOKE TIME DIFFERENCE: " + (currentTime - optUnchokeTime));
 					optUnchokeTime = System.currentTimeMillis();
 					pp.optimisticUnchoke();
 				}
@@ -130,20 +125,19 @@ public class peerProcess {
 					if(in.available() >= 5) {
 						byte[] header = new byte[5];
 						in.read(header);
-						String headerString = new String(header);
+						/*String headerString = new String(header);
 						String hello = new String(new byte[] {72, 69, 76, 76, 79});
 						File file = new File(path + "/" + pp.peerId + ".txt");
 						if(!file.exists()) file.createNewFile();
 						FileWriter fw = new FileWriter(file.getAbsoluteFile(),true);
 						BufferedWriter bw = new BufferedWriter(fw);
 						bw.write("Header: " + headerString + " Size: " + in.available() + "\n");
-						bw.close();
+						bw.close();*/
 						pp.interpretMessage(header, in, p);
 					}
 				}
 			}
-			pp.l.log(Level.WARNING, "EXITED WHILE LOOP");
-			Thread.sleep(10000);
+			Thread.sleep(3000);
 			File dlFile = new File(path + "/peer_" + pp.peerId + "/" + pp.fileName);
 			File dlFileDir = dlFile.getParentFile();
 			if(null != dlFileDir) {
@@ -181,7 +175,7 @@ public class peerProcess {
 				break;
 			}
 		}*/
-		pp.printConnections();
+		//pp.printConnections();
 		try {
 			for(int p: pp.peerIDToSocket.keySet()) {
 				while(!(pp.peerIDToSocket.get(p).isClosed()))
@@ -205,11 +199,10 @@ public class peerProcess {
 			peerIDToSocket.put(destination, clientSocket);
 			handshakeSent.add(destination);
 			sendHandshake(destination);
-			l.log(Level.INFO, "Peer " + peerId + " sent handshake to peer " + destination);
 		}
 	}
 
-	public void printConnections(){
+	/*public void printConnections(){
 		try{	
 			String path = System.getProperty("user.dir");
 			File file = new File(path + "/" + peerId + ".txt");
@@ -233,7 +226,7 @@ public class peerProcess {
 
 		}
 
-	}
+	}*/
 
 	public void interpretMessage(byte[] header, InputStream in, int peerID) throws Exception{
 		byte messageType = header[4];
@@ -248,7 +241,6 @@ public class peerProcess {
 				handshakeSent.add(receivedPeerID);
 				sendHandshake(receivedPeerID);
 			}
-			l.log(Level.WARNING, "Peer " + peerId + " received handshake from peer " + peerID);
 			sendBitfield(receivedPeerID);
 		}
 		else if(messageType == 0) {	//choke
@@ -261,27 +253,26 @@ public class peerProcess {
 			byte[] peerBitfield = bitfields.get(peerID);
 			if(checkBitfield(peerBitfield)) {
 				ArrayList<Integer> pieces = new ArrayList<Integer>();
-				for(int i = 0; i < peerBitfield.length - 1; i++) {
-					l.log(Level.WARNING, "LOOPING");
+				for(int i = 0; i < bitfieldLength - 1; i++) {
 					for(int j = 0; j < 8; j++) {
-						byte mask = (byte) (1 << j);
+						byte mask = (byte) (1 << (7 - j));
 						if(((bitfield[i] & mask) == 0) && ((peerBitfield[i] & mask) == mask)) {
 							pieces.add(i * 8 + j);
 						}
 					}
 				}
 				int leftover = numPieces % 8;
+				if(leftover == 0) {
+					leftover = 8;
+				}
 				for(int i = 0; i < leftover; i++) {
-					byte mask = (byte) (1 << i);
-					if(((bitfield[bitfield.length - 1] & mask) == 0) && ((peerBitfield[peerBitfield.length - 1] & mask) == mask)) {
+					byte mask = (byte) (1 << (7 - i));
+					if(((bitfield[bitfieldLength - 1] & mask) == 0) && ((peerBitfield[peerBitfield.length - 1] & mask) == mask)) {
 						pieces.add((bitfield.length - 1) * 8 + i);
 					}
 				}
 				int pieceIndex = (int) (Math.random() * pieces.size());
-				l.log(Level.INFO, "BITFIELD SIZE: " + peerBitfield.length);
-				l.log(Level.INFO, "PIECES SIZE: " + pieces.size());
 				sendRequest(peerID, pieces.get(pieceIndex));
-				l.log(Level.WARNING, "Requesting piece index " + pieces.get(pieceIndex) + " from peer " + peerID);
 			}
 			else {
 				sendNotInterested(peerID);
@@ -303,7 +294,7 @@ public class peerProcess {
 			int byteNum = pieceIndex / 8;
 			int bit = pieceIndex % 8;
 			byte[] peerBitfield = bitfields.get(peerID);
-			peerBitfield[byteNum] |= 1 << bit;
+			peerBitfield[byteNum] |= 1 << (7 - bit);
 			if(checkBitfield(peerBitfield)) {
 				sendInterested(peerID);
 			}
@@ -335,7 +326,6 @@ public class peerProcess {
 			in.read(pieceIndexBytes);
 			int pieceIndex = Message.byteArrayToInt(pieceIndexBytes);
 			sendPiece(peerID, pieceIndex, theFile[pieceIndex]);
-			l.log(Level.WARNING, "Sent piece index " + pieceIndex + " to peer " + peerID);
 		}
 		else if(messageType == 7) {	//piece
 			numPiecesRec++;
@@ -343,52 +333,51 @@ public class peerProcess {
 			byte[] pieceIndexBytes = new byte[4];
 			in.read(pieceIndexBytes);
 			int pieceIndex = Message.byteArrayToInt(pieceIndexBytes);
-			l.log(Level.INFO, "Peer " + peerId + " has downloaded the piece " + pieceIndex + " from " + peerID + "\nNow the number of pieces it has is " + numPiecesRec);
+			l.log(Level.INFO, "Peer " + peerId + " has downloaded the piece " + pieceIndex + " from " + peerID + ". Now the number of pieces it has is " + numPiecesRec);
 			byte[] piece = new byte[messageLength - 5];
 			in.read(piece);
 			theFile[pieceIndex] = piece;
-			sendHave(peerID, pieceIndex);
+			for(int i : peerIDToSocket.keySet()) {
+				sendHave(i, pieceIndex);
+			}
 			int byteNum = pieceIndex / 8;
 			int bit = pieceIndex % 8;
-			bitfield[byteNum] |= 1 << bit;
-			for(int i = 0; i < peerInfoVector.size(); i++) {
-				int otherPeerID = Integer.parseInt(peerInfoVector.get(i).peerId);
-				l.log(Level.WARNING, "BITFIELDS GET SIZE: " + bitfields.get(otherPeerID).length);
-				if(checkBitfield(bitfields.get(otherPeerID))) {
-					sendInterested(otherPeerID);
+			bitfield[byteNum] |= 1 << (7 - bit);
+			for(int i : peerIDToSocket.keySet()) {
+				if(checkBitfield(bitfields.get(i))) {
+					sendInterested(i);
 				}
 				else {
-					sendNotInterested(otherPeerID);
+					sendNotInterested(i);
 				}
 			}
 			byte[] peerBitfield = bitfields.get(peerID);
 			if(checkBitfield(peerBitfield) && !chokedByList.contains(peerID)) {
 				ArrayList<Integer> pieces = new ArrayList<Integer>();
-				for(int i = 0; i < peerBitfield.length - 1; i++) {
+				for(int i = 0; i < bitfieldLength - 1; i++) {
 					for(int j = 0; j < 8; j++) {
-						byte mask = (byte) (1 << j);
+						byte mask = (byte) (1 << (7 - j));
 						if(((bitfield[i] & mask) == 0) && ((peerBitfield[i] & mask) == mask)) {
 							pieces.add(i * 8 + j);
 						}
 					}
 				}
 				int leftover = numPieces % 8;
+				if(leftover == 0) {
+					leftover = 8;
+				}
 				for(int i = 0; i < leftover; i++) {
-					byte mask = (byte) (1 << i);
-					if(((bitfield[bitfield.length - 1] & mask) == 0) && ((peerBitfield[peerBitfield.length - 1] & mask) == mask)) {
+					byte mask = (byte) (1 << (7 - i));
+					if(((bitfield[bitfieldLength - 1] & mask) == 0) && ((peerBitfield[peerBitfield.length - 1] & mask) == mask)) {
 						pieces.add((bitfield.length - 1) * 8 + i);
 					}
 				}
 				int newPieceIndex = (int) (Math.random() * pieces.size());
-				l.log(Level.INFO, "NEW PIECE INDEX: " + newPieceIndex);
-				l.log(Level.INFO, "PIECES SIZE: " + pieces.size());
 				sendRequest(peerID, pieces.get(newPieceIndex));
-				l.log(Level.WARNING, "Requesting piece index " + pieces.get(newPieceIndex) + " from peer " + peerID);
 			}
 			if(haveFile(peerId)) {
 				hasFile = true;
 				l.log(Level.INFO, "Peer " + peerId + " has downloaded the complete file");
-				l.log(Level.WARNING, "Do all peers have file? " + allHaveFile());
 			}
 			//store data somewhere
 			//send have message to all peers
@@ -403,7 +392,7 @@ public class peerProcess {
 				break;
 			}
 			for(int j = 0; j < 8; j++) {
-				byte mask = (byte) (1 << j);
+				byte mask = (byte) (1 << (7 - j));
 				if(((bitfield[i] & mask) == 0) && ((peerBitfield[i] & mask) == mask)) {
 					result = true;
 					break;
@@ -411,8 +400,11 @@ public class peerProcess {
 			}
 		}
 		int leftover = numPieces % 8;
+		if(leftover == 0) {
+			leftover = 8;
+		}
 		for(int i = 0; i < leftover; i++) {
-			byte mask = (byte) (1 << i);
+			byte mask = (byte) (1 << (7 - i));
 			if(((bitfield[bitfield.length - 1] & mask) == 0) && ((peerBitfield[peerBitfield.length - 1] & mask) == mask)) {
 				result = true;
 				break;
@@ -440,15 +432,18 @@ public class peerProcess {
 		}
 		for(int j = 0; j < currBitfield.length - 1; j++) {
 			for(int k = 0; k < 8; k++) {
-				byte mask = (byte) (1 << k);
+				byte mask = (byte) (1 << (7 - k));
 				if(((currBitfield[j] & mask) == 0)) {
 					return false;
 				}
 			}
 		}
 		int leftover = numPieces % 8;
+		if(leftover == 0) {
+			leftover = 8;
+		}
 		for(int j = 0; j < leftover; j++) {
-			byte mask = (byte) (1 << j);
+			byte mask = (byte) (1 << (7 - j));
 			if(((currBitfield[currBitfield.length - 1] & mask) == 0)) {
 				return false;
 			}
@@ -538,12 +533,18 @@ public class peerProcess {
 			int peerID, randIndex;
 			int numPeersGenerated = 0;
 			do {
+				if(interestedList.isEmpty()) {
+					break;
+				}
 				randIndex = (int) (Math.random() * peerInfoVector.size());
 				peerID = Integer.parseInt(peerInfoVector.get(randIndex).peerId);
+				if(interestedList.contains(peerID)) {
+					numPeersGenerated++;
+					unchokeList.put(peerID, 1);
+					sendUnchoke(peerID);
+				}
 			}
-			while(!interestedList.contains(peerID));
-			unchokeList.put(peerID, 1);
-			sendUnchoke(peerID);
+			while(numPeersGenerated < numPrefNeighbors);
 		}
 		String prefNeighbors = "";
 		for(int i : unchokeList.keySet()) {
@@ -562,13 +563,21 @@ public class peerProcess {
 		//called every x seconds
 		//randomly unchoke neighbor in interested list
 		int peerID, randIndex;
+		int numPeersGenerated = 0;
 		do {
+			if(interestedList.isEmpty()) {
+				break;
+			}
 			randIndex = (int) (Math.random() * peerInfoVector.size());
 			peerID = Integer.parseInt(peerInfoVector.get(randIndex).peerId);
+			if(interestedList.contains(peerID)) {
+				numPeersGenerated++;
+				unchokeList.put(peerID, 1);
+				sendUnchoke(peerID);
+				l.log(Level.INFO, "Peer " + peerId + " has the optimistically-unchoked neighbor " + peerID);
+			}
 		}
-		while(!interestedList.contains(peerID));
-		unchokeList.put(peerID, 1);
-		l.log(Level.INFO, "Peer " + peerId + " has the optimistically-unchoked neighbor " + peerID);
+		while(numPeersGenerated < 1);
 		//may become preferred neighbor
 	}
 
@@ -638,8 +647,11 @@ public class peerProcess {
 						hasFile = true;
 		        			Arrays.fill(bitfield, (byte) 0xFF);
 		     		   		byte lastByte = 0;
+						if(leftover == 0) {
+							leftover = 8;
+						}
 		    	    			for(int i = 0; i < leftover; i++) {
-		        				lastByte |= 1 << i;
+		        				lastByte |= 1 << (7 - i);
 		        			}
 		        		
 		        			bitfield[numBytes - 1] = lastByte;
@@ -662,11 +674,15 @@ public class peerProcess {
 		        			numBytes += 1;
 		        		}
 					byte[] tempBitfield = new byte[numBytes];
+					bitfieldLength = numBytes;
 					if(Integer.parseInt(tokens[3]) == 1) {		//set bitfield to 1 if this peer has file. test this
 		        			Arrays.fill(tempBitfield, (byte) 0xFF);
 		     		   		byte lastByte = 0;
+						if(leftover == 0) {
+							leftover = 8;
+						}
 		    	    			for(int i = 0; i < leftover; i++) {
-		        				lastByte |= 1 << i;
+		        				lastByte |= 1 << (7 - i);
 		        			}
 		        		
 		        			tempBitfield[numBytes - 1] = lastByte;
